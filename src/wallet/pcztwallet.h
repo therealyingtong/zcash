@@ -17,6 +17,17 @@ enum class TransactionError {
 std::string TransactionErrorString(const TransactionError err);
 
 /**
+ * Adds an output to PCZT using the wallet.
+ */
+
+TransactionError AddOutputPczt(
+    CWallet* pwallet,
+    Pczt& pczt,
+    libzcash::SaplingPaymentAddress& to,
+    CAmount value,
+    std::array<unsigned char, ZC_MEMO_SIZE> memo = {{0xF6}});
+
+/**
  * Funds a PCZT using the wallet.
  */
 TransactionError FundPczt(

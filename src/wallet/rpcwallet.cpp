@@ -5076,14 +5076,14 @@ UniValue z_getnotescount(const UniValue& params, bool fHelp)
     return ret;
 }
 
-UniValue walletfundpczt(const UniValue& params, bool fHelp)
+UniValue pczt_fund(const UniValue& params, bool fHelp)
 {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
     if (fHelp || params.size() < 2 || params.size() > 3)
         throw runtime_error(
-            "walletfundpczt\n"
+            "pczt_fund\n"
             "\nAdds Sapling spends to a Partially Created Transaction to satisfy its outputs.\n"
             "If there is change, it is returned to the address that the spent notes were from.\n"
             "\nArguments:\n"
@@ -5095,9 +5095,9 @@ UniValue walletfundpczt(const UniValue& params, bool fHelp)
             "}\n"
             "\nExamples:\n"
             "\nProcess a PCZT\n"
-            + HelpExampleCli("walletfundpczt", "EgsIBBWFIC+JIIqEGg==") +
+            + HelpExampleCli("pczt_fund", "\"EgsIBBWFIC+JIIqEGg==\" \"ztbx5DLDxa5ZLFTchHhoPNkKs57QzSyib6UqXpEdy76T1aUdFxJt1w9318Z8DJ73XzbnWHKEZP9Yjg712N5kMmP4QzS9iC9\"") +
             "\nAs a json rpc call\n"
-            + HelpExampleRpc("walletfundpczt", "\"EgsIBBWFIC+JIIqEGg==\"")
+            + HelpExampleRpc("pczt_fund", "\"EgsIBBWFIC+JIIqEGg==\", \"ztbx5DLDxa5ZLFTchHhoPNkKs57QzSyib6UqXpEdy76T1aUdFxJt1w9318Z8DJ73XzbnWHKEZP9Yjg712N5kMmP4QzS9iC9\"")
         );
 
     RPCTypeCheck(params, boost::assign::list_of(UniValue::VSTR)(UniValue::VSTR));
@@ -5119,6 +5119,65 @@ UniValue walletfundpczt(const UniValue& params, bool fHelp)
     auto address = boost::get<libzcash::SaplingPaymentAddress>(zaddr);
 
     const auto err = FundPczt(pwalletMain, pczt, address);
+    if (err != TransactionError::OK) {
+        throw JSONRPCError(RPC_WALLET_ERROR, TransactionErrorString(err));
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("pczt", EncodeBase64(pczt.Serialize()));
+    return result;
+}
+
+UniValue pczt_addoutput(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    if (fHelp || params.size() < 3 || params.size() > 4)
+        throw runtime_error(
+            "pczt_addoutput\n"
+            "\nAdds Sapling outputs to a Partially Created Transaction.\n"
+            "\nArguments:\n"
+            "1. \"pczt\"    (string, required)"
+            "2. \"to\"      (string, required) The Sapling address to spend the output to\n"
+            "3. \"value\"   (numeric, required) The value of the output\n"
+            "4. \"memo\"    (string, optional) Hexademical string representation of memo field\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"pczt\": \"value\",    (string) The resulting raw transaction, as a base64-encoded string\n"
+            "}\n"
+            "\nExamples:\n"
+            "\nProcess a PCZT\n"
+            + HelpExampleCli("pczt_addoutput", "\"EgsIBBWFIC+JIIqEGg==\" \"1\"") +
+            "\nAs a json rpc call\n"
+            + HelpExampleRpc("pczt_addoutput", "\"EgsIBBWFIC+JIIqEGg==\", \"1\"")
+        );
+
+    RPCTypeCheck(params, boost::assign::list_of(UniValue::VSTR)(UniValue::VSTR));
+
+    // Unserialize the transaction
+    Pczt pczt;
+    std::string error;
+    if (!pczt.Parse(params[0].get_str(), error)) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", error));
+    }
+
+    // Get recipient Sapling address
+    auto zaddr = DecodePaymentAddress(params[1].get_str());
+    if (!IsValidPaymentAddress(zaddr)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Sapling address");
+    }
+    if (boost::get<libzcash::SaplingPaymentAddress>(&zaddr) == nullptr) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Must fund PCZT with a Sapling address");
+    }
+    auto address = boost::get<libzcash::SaplingPaymentAddress>(zaddr);
+
+    // Amount
+    CAmount nAmount = AmountFromValue(params[2]);
+    if (nAmount <= 0)
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount for send");
+
+    const auto err = AddOutputPczt(pwalletMain, pczt, address, nAmount);
     if (err != TransactionError::OK) {
         throw JSONRPCError(RPC_WALLET_ERROR, TransactionErrorString(err));
     }
@@ -5216,7 +5275,8 @@ static const CRPCCommand commands[] =
     { "wallet",             "z_importwallet",           &z_importwallet,           true  },
     { "wallet",             "z_viewtransaction",        &z_viewtransaction,        false },
     { "wallet",             "z_getnotescount",          &z_getnotescount,          false },
-    { "wallet",             "walletfundpczt",           &walletfundpczt,           false },
+    { "wallet",             "pczt_fund",                &pczt_fund,                false },
+    { "wallet",             "pczt_addoutput",           &pczt_addoutput,           false },
     // TODO: rearrange into another category
     { "disclosure",         "z_getpaymentdisclosure",   &z_getpaymentdisclosure,   true  },
     { "disclosure",         "z_validatepaymentdisclosure", &z_validatepaymentdisclosure, true }

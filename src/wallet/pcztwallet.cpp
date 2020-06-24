@@ -23,6 +23,39 @@ std::string TransactionErrorString(const TransactionError err)
     assert(false);
 }
 
+TransactionError AddOutputPczt(
+    CWallet* pwallet,
+    Pczt& pczt,
+    libzcash::SaplingPaymentAddress& to,
+    CAmount value,
+    std::array<unsigned char, ZC_MEMO_SIZE> memo)
+{
+    LOCK(pwallet->cs_wallet);
+
+    // Get the spending key for the given address
+    // TODO: Support only storing the proving key, leaving spend authority elsewhere
+    libzcash::SaplingExtendedSpendingKey extsk;
+    if (!pwallet->GetSaplingExtendedSpendingKey(to, extsk)) {
+        return TransactionError::MISSING_SPENDING_KEY;
+    }
+    auto extfvk = extsk.ToXFVK();
+    auto keyMetadata = pwallet->mapSaplingZKeyMetadata[extfvk.fvk.in_viewing_key()];
+
+    std::vector<uint32_t> keypath;
+    ParseHDKeypath(keyMetadata.hdKeypath, keypath);
+
+    pczt::Zip32Key zip32Key;
+    zip32Key.set_masterfingerprint(keyMetadata.seedFp.begin(), keyMetadata.seedFp.size());
+    for (auto idx : keypath) {
+        zip32Key.add_derivationpath(idx);
+    }
+
+    pczt.AddSaplingOutput(zip32Key, extsk.expsk.ovk, to, value);
+
+    return TransactionError::OK;
+
+}
+
 TransactionError FundPczt(
     CWallet* pwallet,
     Pczt& pczt,
