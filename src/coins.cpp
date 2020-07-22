@@ -483,7 +483,7 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
         PreloadHistoryTree(epochId, false, entries, entry_indices);
 
         uint256 newRoot;
-        std::array<HistoryNode, 32> appendBuf;
+        std::array<HistoryNode, 32> appendBuf = {};
 
         uint32_t appends = librustzcash_mmr_append(
             epochId, 
@@ -508,10 +508,10 @@ void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
     uint256 newRoot;
 
-    for (int i = 0; i < historyCache.length; i++) {
-        HistoryNode mmrNode = GetHistoryAt(epochId, i);
-        LogPrintf("Pop %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
-    }
+    // for (int i = 0; i < historyCache.length; i++) {
+    //     HistoryNode mmrNode = GetHistoryAt(epochId, i);
+    //     LogPrintf("Pop %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
+    // }
 
     switch (historyCache.length) {
         case 0:
