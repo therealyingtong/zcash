@@ -8,6 +8,7 @@
 #include "random.h"
 #include "version.h"
 #include "policy/fees.h"
+#include "utilstrencodings.h"
 
 #include <assert.h>
 
@@ -463,6 +464,11 @@ HistoryCache& CCoinsViewCache::SelectHistoryCache(uint32_t epochId) const {
 void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
 
+    for (int i = 0; i < historyCache.length; i++) {
+        HistoryNode mmrNode = GetHistoryAt(epochId, i);
+        LogPrintf("Push %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
+    }
+
     if (historyCache.length == 0) {
         // special case, it just goes into the cache right away
         historyCache.Extend(node);
@@ -470,39 +476,42 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
         if (librustzcash_mmr_hash_node(epochId, node.data(), historyCache.root.begin()) != 0) {
             throw std::runtime_error("hashing node failed");
         };
+    } else {
+        std::vector<HistoryEntry> entries;
+        std::vector<uint32_t> entry_indices;
 
-        return;
+        PreloadHistoryTree(epochId, false, entries, entry_indices);
+
+        uint256 newRoot;
+        std::array<HistoryNode, 32> appendBuf;
+
+        uint32_t appends = librustzcash_mmr_append(
+            epochId, 
+            historyCache.length,
+            entry_indices.data(),
+            entries.data(),
+            entry_indices.size(),
+            node.data(),
+            newRoot.begin(),
+            appendBuf.data()->data()
+        );
+
+        for (size_t i = 0; i < appends; i++) {
+            historyCache.Extend(appendBuf[i]);
+        }
+
+        historyCache.root = newRoot;
     }
-
-    std::vector<HistoryEntry> entries;
-    std::vector<uint32_t> entry_indices;
-
-    PreloadHistoryTree(epochId, false, entries, entry_indices);
-
-    uint256 newRoot;
-    std::array<HistoryNode, 32> appendBuf;
-
-    uint32_t appends = librustzcash_mmr_append(
-        epochId, 
-        historyCache.length,
-        entry_indices.data(),
-        entries.data(),
-        entry_indices.size(),
-        node.data(),
-        newRoot.begin(),
-        appendBuf.data()->data()
-    );
-
-    for (size_t i = 0; i < appends; i++) {
-        historyCache.Extend(appendBuf[i]);
-    }
-
-    historyCache.root = newRoot;
 }
 
 void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
     uint256 newRoot;
+
+    for (int i = 0; i < historyCache.length; i++) {
+        HistoryNode mmrNode = GetHistoryAt(epochId, i);
+        LogPrintf("Pop %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
+    }
 
     switch (historyCache.length) {
         case 0:

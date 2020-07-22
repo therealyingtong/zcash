@@ -2890,6 +2890,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         // - If the previous block is in this epoch, this block would affect
         //   this epoch's tree root, but as we haven't updated the tree for this
         //   block yet, view.GetHistoryRoot() returns the root we need.
+        LogPrintf("%s\n", block.hashLightClientRoot.GetHex());
+        LogPrintf("%s\n", view.GetHistoryRoot(prevConsensusBranchId).GetHex());
+        LogPrintf("%x\n", prevConsensusBranchId);
         if (block.hashLightClientRoot != view.GetHistoryRoot(prevConsensusBranchId)) {
             return state.DoS(100,
                 error("ConnectBlock(): block's hashLightClientRoot is incorrect (should be history tree root)"),
